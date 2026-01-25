@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EasyTax – เครื่องคำนวณภาษี</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <header>
+      <div class="logo">EasyTax</div>
+      <nav>
+        <a href="index.html" class="hover-link">หน้าแรก</a>
+      </nav>
+    </header>
+
+    <div class="container" >
+      <h1 style="text-align: center; color: #007bff;">เครื่องคำนวณภาษีบุคคลธรรมดา</h1>
+      <p class="subtitle">
+        ทำตาม 4 ขั้นตอน: ค่าใช้จ่าย → ค่าลดหย่อน → ภาษี → หักเครดิตภาษี
+      </p>
+
+      <div class="card">
+        <h2 style="color: #007bff;">ขั้นตอนที่ 1: คำนวณค่าใช้จ่าย</h2>
+
+        <div id="income-list"></div>
+
+        <button class="addIncome" onclick="addIncomeRow()">
+          + เพิ่มรายได้
+        </button>
+        <br /><br />
+
+        <button onclick="calculateExpense()">คำนวณค่าใช้จ่าย</button>
+        <div id="expense-result" class="result-box"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="color: #007bff;">ขั้นตอนที่ 2: คำนวณค่าลดหย่อน</h2>
+
+        <label>คู่สมรสไม่มีรายได้:</label>
+        <select id="spouse">
+          <option value="0">ไม่มี</option>
+          <option value="60000">มี (+60,000)</option>
+        </select>
+
+        <label>จำนวนบุตร (0–3 คน):</label>
+        <input type="text" id="children" oninput="numericOnly(this)" />
+
+        <label>บิดามารดา (0–2 คน):</label>
+        <input type="text" id="parents" oninput="numericOnly(this)" />
+
+        <label>เบี้ยประกันชีวิต (สูงสุด 100,000):</label>
+        <input type="text" id="life-insurance" oninput="numericOnly(this)" />
+
+        <label>SSF / RMF:</label>
+        <input type="text" id="fund" oninput="numericOnly(this)" />
+
+        <button onclick="calculateDeduction()">คำนวณค่าลดหย่อน</button>
+        <div id="deduction-result" class="result-box"></div>
+      </div>
+
+
+      <div class="card">
+        <h2 style="color: #007bff;">ขั้นตอนที่ 3: คำนวณภาษีตามขั้นบันได</h2>
+        <button onclick="calculateTax()">คำนวณภาษี</button>
+        <div id="tax-result" class="result-box"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="color: #007bff;">ขั้นตอนที่ 4: หักเครดิตภาษี</h2>
+        <label>เครดิตภาษีรวม (บาท):</label>
+        <input type="text" id="taxCredit" oninput="numericOnly(this)" />
+
+        <button onclick="applyCredit()">คำนวณภาษีสุทธิ</button> 
+        <div id="finalResult" class="result-box"></div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <a class="footer-left" href="https://www.rd.go.th/62337.html">อ้างอิง</a>
+
+      <div class="footer-right">
+        จัดทำโดย นายธีรภัทร แย้มนุ่น และ นายอนันตชัย บุตรอินทร์
+      </div>
+    </footer>
+
+    <script>
+      let incomeIndex = 0;
+      let expense = 0;
+      let deduction = 0;
+      const expenseRule = {
+        1: "auto", // เงินเดือน
+        2: "auto", // ค่าจ้างอิสระ
+        3: "both", // ค่าเช่า
+        4: "auto", // ค่าสิทธิ
+        5: "none", // ดอกเบี้ย/ปันผล
+        6: "both", // วิชาชีพอิสระ
+        7: "both", // รับเหมา
+        8: "both", // อื่นๆ
+      };
+
+      function numericOnly(input) {
+        let cleaned = input.value.replace(/[^0-9,]/g, "");
+        let number = cleaned.replace(/,/g, "");
+
+        if (!isNaN(number) && number !== "") {
+          input.value = Number(number).toLocaleString();
+        } else {
+          input.value = "";
+        }
+      }
+
+
+      function addIncomeRow() {
+        const container = document.getElementById("income-list");
+
+        const row = document.createElement("div");
+        row.className = "income-row";
+        row.id = "row-" + incomeIndex;
+
+        row.innerHTML = `
+            <label>ประเภทเงินได้:</label>
+            <select id="income-type-${incomeIndex}"onchange="updateExpenseMode(${incomeIndex})">
+              <option value="1">เงินเดือน (50% ไม่เกิน 100,000)</option>
+              <option value="2">ค่าจ้างอิสระ (50% ไม่เกิน 100,000)</option>
+              <option value="3">ค่าเช่า (10-30%)</option>
+              <option value="4">ค่าสิทธิ (50% ไม่เกิน 100,000)</option>
+              <option value="5">ดอกเบี้ย/ปันผล (หักไม่ได้)</option>
+              <option value="6">วิชาชีพอิสระ (30-60%)</option>
+              <option value="7">รับเหมา (60%)</option>
+              <option value="8">อื่นๆ (40-60%)</option>
+            </select> 
+           
+
+            <label>รายได้ต่อปี:</label>
+            <input type="text" id="income-${incomeIndex}" 
+              placeholder="เช่น 450,000"
+              oninput="numericOnly(this)">
+
+        <label>วิธีหักค่าใช้จ่าย:</label>
+
+        <div id="expense-mode-${incomeIndex}" style="margin-bottom:10px;">
+          <div class="radio-option auto-mode">
+            <input type="radio" name="mode-${incomeIndex}" value="auto" checked >
+            <span>หักเหมาตามกฎหมาย</span>
+          </div>
+          <div class="radio-option real-mode">
+            <input type="radio" name="mode-${incomeIndex}" value="real" class="">
+            <span>หักค่าใช้จ่ายตามจริง</span>
+          </div>
+        </div>
+
+            <div id="real-box-${incomeIndex}" style="display:none;">
+              <label>ค่าใช้จ่ายตามจริง:</label>
+              <input type="text" id="real-expense-${incomeIndex}"
+                placeholder="เช่น 50,000"
+                oninput="numericOnly(this)">
+            </div>
+            <div class="right-align-button">
+              <button class="remove-btn" onclick="removeIncomeRow(${incomeIndex})">ลบรายการนี้</button>
+            </div> 
+          `;
+
+        container.appendChild(row);
+        updateExpenseMode(incomeIndex);
+        incomeIndex++;
+      }
+
+
+      document.addEventListener("change", (e) => {
+        if (e.target.name && e.target.name.startsWith("mode-")) {
+          const index = e.target.name.split("-")[1];
+          const box = document.getElementById("real-box-" + index);
+
+          box.style.display = e.target.value === "real" ? "block" : "none";
+        }
+      });
+
+      function updateExpenseMode(index) {
+        const type = document.getElementById(`income-type-${index}`).value;
+        const rule = expenseRule[type];
+
+        const modeBox = document.getElementById(`expense-mode-${index}`);
+        const autoMode = modeBox.querySelector(".auto-mode");
+        const realMode = modeBox.querySelector(".real-mode");
+        const realBox = document.getElementById(`real-box-${index}`);
+
+        // ซ่อนทุกอย่างก่อน
+        autoMode.style.display = "none";
+        realMode.style.display = "none";
+        realBox.style.display = "none";
+
+        // กรณีหักไม่ได้เลย
+        if (rule === "none") {
+          modeBox.style.display = "none";
+          return;
+        }
+
+        modeBox.style.display = "block";
+
+        // กรณีหักเหมาอย่างเดียว
+        if (rule === "auto") {
+          autoMode.style.display = "block";
+          autoMode.querySelector("input").checked = true;
+        }
+
+        // กรณีเลือกได้ทั้งสองแบบ
+        if (rule === "both") {
+          autoMode.style.display = "block";
+          realMode.style.display = "block";
+          autoMode.querySelector("input").checked = true;
+        }
+      }
+
+      /* ✅ ลบรายการ */
+      function removeIncomeRow(id) {
+        const row = document.getElementById("row-" + id);
+        if (row) row.remove();
+      }
+
+      /* ✅ คำนวณค่าใช้จ่าย */
+      function calculateExpense() {
+        let totalExpense = 0;
+        let incomeType12Total = 0; // 
+        for (let i = 0; i < incomeIndex; i++) {
+          const typeEl = document.getElementById(`income-type-${i}`);
+          const incomeEl = document.getElementById(`income-${i}`);
+          const modeEl = document.querySelector(
+            `input[name="mode-${i}"]:checked`
+          );
+          if (!typeEl || !incomeEl || !modeEl) continue;
+          const type = Number(typeEl.value);
+          const income = Number(incomeEl.value.replace(/,/g, "") || 0);
+          const mode = modeEl.value;
+          let exp = 0;
+          /* ✅ หักตามจริง */
+          if (mode === "real") {
+            const realEl = document.getElementById(`real-expense-${i}`);
+            const real = Number(
+              (realEl?.value || "0").replace(/,/g, "")
+            );
+            exp = Math.min(real, income);
+          } 
+          /* ✅ หักเหมา */
+          else {
+            if (type === 1 || type === 2) {
+              incomeType12Total += income; // ✅ สะสมอย่างเดียว
+            } else if (type === 4) {
+              exp = Math.min(income * 0.5, 100000);
+            } else if (type === 3) {
+              exp = income * 0.15;
+            } else if (type === 6) {
+              exp = income * 0.45;
+            } else if (type === 7) {
+              exp = income * 0.6;
+            } else if (type === 8) {
+              exp = income * 0.5;
+            }
+          }
+          totalExpense += exp;
+        }
+        /* ✅ คิด type 1 + 2 หลัง loop */
+        if (incomeType12Total > 0) {
+          totalExpense += Math.min(incomeType12Total * 0.5, 100000);
+        }
+
+        expense = totalExpense;
+
+        document.getElementById("expense-result").innerHTML =
+          "ค่าใช้จ่ายรวมทั้งหมด: " + totalExpense.toLocaleString() + " บาท";
+      }
+
+      /* ✅ ค่าลดหย่อน */
+      function calculateDeduction() {
+        const spouse = Number(document.getElementById("spouse").value);
+
+        const children = Number(
+          document.getElementById("children").value.replace(/,/g, "") || 0
+        );
+
+        const parents = Number(
+          document.getElementById("parents").value.replace(/,/g, "") || 0
+        );
+
+        const insurance = Math.min(
+          Number(
+            document.getElementById("life-insurance").value.replace(/,/g, "")
+          ) || 0,
+          100000
+        );
+
+        const fund = Math.min(
+          Number(document.getElementById("fund").value.replace(/,/g, "")
+          ) || 0,
+          500000
+        );
+        let childrenDeduction = 0;
+
+        if (children <= 2) childrenDeduction = children * 30000;
+        else childrenDeduction = 60000 + (children - 2) * 60000;
+
+        deduction =
+          60000 +
+          spouse +
+          childrenDeduction +
+          parents * 30000 +
+          insurance +
+          fund;
+
+        document.getElementById("deduction-result").innerHTML =
+          "ค่าลดหย่อนรวม: " + deduction.toLocaleString() + " บาท";
+      }
+
+      
+      let tax = 0; // ตัวแปร global เก็บภาษี
+
+      function calculateTax() {
+        let totalIncome = 0;
+
+        for (let i = 0; i < incomeIndex; i++) {
+          const incomeEl = document.getElementById(`income-${i}`);
+          if (!incomeEl) continue;
+          totalIncome += Number(incomeEl.value.replace(/,/g, "") || 0);
+        }
+
+        const net = totalIncome - expense - deduction;
+
+        // ใช้ global tax
+        if (net <= 150000) tax = 0;
+        else if (net <= 300000) tax = (net - 150000) * 0.05;
+        else if (net <= 500000) tax = 7500 + (net - 300000) * 0.1;
+        else if (net <= 750000) tax = 27500 + (net - 500000) * 0.15;
+        else if (net <= 1000000) tax = 65000 + (net - 750000) * 0.2;
+        else if (net <= 2000000) tax = 115000 + (net - 1000000) * 0.25;
+        else if (net <= 5000000) tax = 365000 + (net - 2000000) * 0.3;
+        else tax = 1265000 + (net - 5000000) * 0.35;
+
+        document.getElementById("tax-result").innerHTML =
+          "ภาษีที่ต้องจ่าย: " + Math.max(0, tax).toLocaleString() + " บาท";
+      }
+
+      function applyCredit() {
+        const credit =
+          +document.getElementById("taxCredit").value.replace(/,/g, "") || 0;
+        const netTax = tax - credit; // ใช้ global tax
+
+        let message = "";
+        if (netTax > 0)
+          message = `ภาษีที่ต้องจ่ายเพิ่ม: ${netTax.toLocaleString()} บาท`;
+        else if (netTax < 0)
+          message = `ขอคืนภาษีได้: ${Math.abs(netTax).toLocaleString()} บาท`;
+        else message = `ไม่ต้องจ่ายเพิ่ม`;
+
+        document.getElementById("finalResult").innerHTML = message;
+      }
+    </script>
+  </body>
+</html>
